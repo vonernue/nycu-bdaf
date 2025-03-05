@@ -65,7 +65,8 @@ contract Lab2Option {
 
         if (ethBalance > 0) {
             balances[msg.sender] = 0;
-            payable(msg.sender).transfer(ethBalance);
+            (bool sent, ) = msg.sender.call{value: ethBalance}("");
+            require(sent, "Failed to send Ether");
         }
         
         if (tokenBalance > 0) {
@@ -78,7 +79,7 @@ contract Lab2Option {
         require(balances[user] > 0, "User has no funds to trade");
         uint256 amount = balances[user];
         balances[user] = 0;
-        reward[user] += (amount / (10 ** 18)) * 2500;
+        reward[user] += amount * 2500;
         tradedETH += amount;
     }
 
