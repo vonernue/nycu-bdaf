@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 
+require('@nomicfoundation/hardhat-verify');
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
 
@@ -31,6 +32,25 @@ module.exports = {
     }
   },
   etherscan: {
-    apiKey: `${process.env.ETHERSCAN_API_KEY}`
+    enabled: true,
+    apiKey: {
+      sepolia: `${process.env.ETHERSCAN_API_KEY}`,
+      zircuitGarfield: `${process.env.ZIRCUITGARFIELD_EXPLORER_API_KEY}`
+    },
+    customChains: [
+      {
+        network: "zircuitGarfield",
+        chainId: 48898,
+        urls: {
+          apiURL: "https://explorer.garfield-testnet.zircuit.com/api/contractVerifyHardhat",
+          browserURL: "https://explorer.garfield-testnet.zircuit.com"
+        }
+      }
+    ]
   },
+  sourcify: {
+    enabled: false,
+    apiUrl: 'https://sourcify.dev/server',
+    browserUrl: 'https://repo.sourcify.dev',
+  }
 };
