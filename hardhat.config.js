@@ -1,5 +1,12 @@
+const crypto = require("crypto");
+
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
+
+// Create Placeholder Private Key if .env not present
+if (!process.env.PRIVATE_KEY) {
+  process.env.PRIVATE_KEY = crypto.randomBytes(32).toString("hex"); 
+}
 
 /** @type import('hardhat/config').HardhatUserConfig */
 module.exports = {
