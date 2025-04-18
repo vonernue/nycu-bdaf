@@ -3,10 +3,10 @@ const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
 describe("DonationVault", function () {
-    let DonationVault, donationVault, vaultAddress, MockERC20, mockERC20, tokenAddress, owner, depositUser1, depositUser2;
+    let DonationVault, donationVault, vaultAddress, MockERC20, mockERC20, tokenAddress, owner, depositUser1, depositUser2, depositUser3;
 
     beforeEach(async function () {
-        [owner, depositUser1, depositUser2, donationUser, vaultOwner] = await ethers.getSigners();
+        [owner, depositUser1, depositUser2, depositUser3, donationUser, vaultOwner] = await ethers.getSigners();
 
         // Deploy a mock ERC20 token
         MockERC20 = await ethers.getContractFactory("Lab4Token");
@@ -14,9 +14,10 @@ describe("DonationVault", function () {
         tokenAddress = mockERC20.target;
 
         // Mint some tokens to depositUser1 and depositUser2
-        await mockERC20.transfer(depositUser1.address, ethers.parseEther("1000"));
-        await mockERC20.transfer(depositUser2.address, ethers.parseEther("1000"));
-        await mockERC20.transfer(donationUser.address, ethers.parseEther("1000"));
+        await mockERC20.transfer(depositUser1.address, ethers.parseEther("100"));
+        await mockERC20.transfer(depositUser2.address, ethers.parseEther("100"));
+        await mockERC20.transfer(depositUser3.address, ethers.parseEther("100"));
+        await mockERC20.transfer(donationUser.address, ethers.parseEther("100"));
 
         // Deploy the DonationVault contract
         DonationVault = await ethers.getContractFactory("DonationVault");
@@ -59,7 +60,7 @@ describe("DonationVault", function () {
         expect(shares).to.equal(0);
 
         const depositUser1Balance = await mockERC20.balanceOf(depositUser1.address);
-        expect(depositUser1Balance).to.equal(ethers.parseEther("1000"));
+        expect(depositUser1Balance).to.equal(ethers.parseEther("100"));
 
         const vaultBalance = await mockERC20.balanceOf(vaultAddress);
         expect(vaultBalance).to.equal(0);
@@ -130,5 +131,143 @@ describe("DonationVault", function () {
         // Check updated share price
         sharePrice = await donationVault.sharePrice();
         expect(sharePrice).to.be.closeTo(ethers.parseEther("0.9"), ethers.parseEther("0.0001"));
+    });
+
+    it("Scenario 1", async function () {
+        const aliceDeposit = ethers.parseEther("100");
+        const bobDeposit = ethers.parseEther("100");
+        const donationAmount = ethers.parseEther("100");
+    
+        // Alice deposits 100 USDC
+        await mockERC20.connect(depositUser1).approve(vaultAddress, aliceDeposit);
+        await donationVault.connect(depositUser1).deposit(aliceDeposit);
+    
+        // Check vault balance and Alice's shares
+        let vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(aliceDeposit);
+    
+        let aliceShares = await donationVault.balanceOf(depositUser1.address);
+        expect(aliceShares).to.equal(aliceDeposit);
+    
+        // Bob deposits 100 USDC
+        await mockERC20.connect(depositUser2).approve(vaultAddress, bobDeposit);
+        await donationVault.connect(depositUser2).deposit(bobDeposit);
+    
+        // Check vault balance and Bob's shares
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(aliceDeposit + bobDeposit);
+    
+        let bobShares = await donationVault.balanceOf(depositUser2.address);
+        expect(bobShares).to.equal(bobDeposit);
+    
+        // Some entity donates 100 USDC directly to the vault
+        await mockERC20.connect(donationUser).transfer(vaultAddress, donationAmount);
+    
+        // Check vault balance after donation
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(aliceDeposit + bobDeposit + donationAmount);
+    
+        // Alice withdraws her shares
+        await donationVault.connect(depositUser1).withdraw(aliceShares);
+    
+        // Check Alice's balance and vault balance
+        const aliceBalance = await mockERC20.balanceOf(depositUser1.address);
+        expect(aliceBalance).to.equal(ethers.parseEther("150")); // Initial 100 + 50 (withdrawn)
+    
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(ethers.parseEther("150")); // 300 - 150 (Alice's withdrawal)
+    
+        // Bob withdraws half of his shares
+        const bobWithdrawAmount = bobShares/BigInt(2);
+        await donationVault.connect(depositUser2).withdraw(bobWithdrawAmount);
+    
+        // Check Bob's balance and vault balance
+        const bobBalance = await mockERC20.balanceOf(depositUser2.address);
+        expect(bobBalance).to.equal(ethers.parseEther("75")); // Withdraw 50% of his shares
+    
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(ethers.parseEther("75")); // 150 - 75 (Bob's withdrawal)
+    });
+
+    it("Scenario 2", async function () {
+        const aliceDeposit = ethers.parseEther("100");
+        const bobDeposit = ethers.parseEther("100");
+        const donationAmount = ethers.parseEther("100");
+        const carolDeposit = ethers.parseEther("75");
+    
+        // Alice deposits 100 USDC
+        await mockERC20.connect(depositUser1).approve(vaultAddress, aliceDeposit);
+        await donationVault.connect(depositUser1).deposit(aliceDeposit);
+    
+        // Check vault balance and Alice's shares
+        let vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(aliceDeposit);
+    
+        let aliceShares = await donationVault.balanceOf(depositUser1.address);
+        expect(aliceShares).to.equal(aliceDeposit);
+    
+        // Bob deposits 100 USDC
+        await mockERC20.connect(depositUser2).approve(vaultAddress, bobDeposit);
+        await donationVault.connect(depositUser2).deposit(bobDeposit);
+    
+        // Check vault balance and Bob's shares
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(aliceDeposit + bobDeposit);
+    
+        let bobShares = await donationVault.balanceOf(depositUser2.address);
+        expect(bobShares).to.equal(bobDeposit);
+    
+        // Some entity donates 100 USDC directly to the vault
+        await mockERC20.connect(donationUser).transfer(vaultAddress, donationAmount);
+    
+        // Check vault balance after donation
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(aliceDeposit + bobDeposit + donationAmount);
+    
+        // Alice withdraws her shares
+        await donationVault.connect(depositUser1).withdraw(aliceShares);
+    
+        // Check Alice's balance and vault balance
+        const aliceBalance = await mockERC20.balanceOf(depositUser1.address);
+        expect(aliceBalance).to.equal(ethers.parseEther("150")); // Initial 1000 + 150 (withdrawn)
+    
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(ethers.parseEther("150")); // 300 - 150 (Alice's withdrawal)
+    
+        // Check Alice's shares after withdrawal
+        aliceShares = await donationVault.balanceOf(depositUser1.address);
+        expect(aliceShares).to.equal(0); // Alice's shares are burnt
+    
+        // Bob withdraws half of his shares
+        const bobWithdrawAmount = bobShares/BigInt(2);
+        await donationVault.connect(depositUser2).withdraw(bobWithdrawAmount);
+    
+        // Check Bob's balance and vault balance
+        const bobBalance = await mockERC20.balanceOf(depositUser2.address);
+        expect(bobBalance).to.equal(ethers.parseEther("75")); // Withdraw 50% of his shares
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(ethers.parseEther("75")); // 150 - 75 (Bob's withdrawal)
+    
+        // Check Bob's remaining shares
+        bobShares = await donationVault.balanceOf(depositUser2.address);
+        expect(bobShares).to.equal(ethers.parseEther("50")); // Bob still has 50 shares
+    
+        // Carol deposits 75 USDC
+        await mockERC20.connect(depositUser3).approve(vaultAddress, carolDeposit);
+        await donationVault.connect(depositUser3).deposit(carolDeposit);
+    
+        // Check vault balance and Carol's shares
+        vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(ethers.parseEther("150")); // 75 (previous) + 75 (Carol's deposit)
+    
+        const carolShares = await donationVault.balanceOf(depositUser3.address);
+        expect(carolShares).to.equal(ethers.parseEther("50")); // Carol receives 50 shares
+    
+        // Final state checks
+        const totalShares = await donationVault.totalSupply();
+        expect(totalShares).to.equal(ethers.parseEther("100")); // 50 (Bob) + 50 (Carol)
+    
+        const sharePrice = await donationVault.sharePrice();
+        expect(sharePrice).to.be.closeTo(ethers.parseEther("1.5"), ethers.parseEther("0.0001")); // Vault balance (150) / total shares (100)
     });
 });
