@@ -312,5 +312,26 @@ describe("DonationVault", function () {
         vaultBalance = await mockERC20.balanceOf(vaultAddress);
         expect(vaultBalance).to.equal(0); // Vault is drained
     });
+
+    it("Should drain vault by owner", async function () {
+        const depositAmount = ethers.parseEther("100");
+        const feeAmount = ethers.parseEther("200");
+
+        // Deposit tokens
+        await mockERC20.connect(depositUser1).approve(vaultAddress, depositAmount);
+        await donationVault.connect(depositUser1).deposit(depositAmount);
+        await mockERC20.connect(depositUser2).approve(vaultAddress, depositAmount);
+        await donationVault.connect(depositUser2).deposit(depositAmount);
+
+        // Take fee as owner
+        await donationVault.connect(vaultOwner).takeFeeAsOwner(feeAmount);
+
+        // Check balances
+        const ownerBalance = await mockERC20.balanceOf(vaultOwner.address);
+        expect(ownerBalance).to.equal(feeAmount);
+
+        const vaultBalance = await mockERC20.balanceOf(vaultAddress);
+        expect(vaultBalance).to.equal(0);
+    });
 });
 
